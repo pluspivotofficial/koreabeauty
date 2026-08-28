@@ -1,5 +1,7 @@
 import { getRates, toJpy } from './currency';
 import { computeLandedCost } from './landedCost';
+import { analyzePrice, isPriceDrop } from './priceDrop';
+import { getHistoryStore } from './priceHistory';
 import { aggregate } from './providers';
 import { allSeedProducts } from './providers/seed';
 import { getShopOrFallback } from './shops';
@@ -21,6 +23,7 @@ export const SORT_LABELS: Record<SortKey, string> = {
   'price-asc': '総額が安い順',
   'price-desc': '総額が高い順',
   newest: '新着順',
+  drop: '値下げ幅が大きい順',
 };
 
 export interface PricedOffer {
@@ -63,6 +66,8 @@ function sortHits(hits: SearchHit[], sort: SortKey): SearchHit[] {
       return sorted.sort((a, b) => b.product.trendScore - a.product.trendScore);
     case 'newest':
       return sorted.sort((a, b) => b.product.addedAt.localeCompare(a.product.addedAt));
+    case 'drop':
+      return sorted.sort((a, b) => a.insight.changePct - b.insight.changePct);
     case 'popular':
     default:
       return sorted.sort((a, b) => b.product.popularity - a.product.popularity);
@@ -76,7 +81,12 @@ function sortHits(hits: SearchHit[], sort: SortKey): SearchHit[] {
  * 効かせている。これが単なるモール内検索との一番の違い。
  */
 export async function searchProducts(query: SearchQuery): Promise<SearchResult & { failedProviders: string[] }> {
-  const [{ products, failed }, { rates }] = await Promise.all([aggregate(query), getRates()]);
+  const [{ products, failed }, { rates }, histories] = await Promise.all([
+    aggregate(query),
+    getRates(),
+    getHistoryStore().getAll(),
+  ]);
+  const historyById = new Map(histories.map((h) => [h.productId, h]));
 
   const hits: SearchHit[] = [];
   for (const product of products) {
@@ -101,19 +111,22 @@ export async function searchProducts(query: SearchQuery): Promise<SearchResult &
       bestShop: best.shop,
       bestLandedCost: best.landedCost,
       spreadJpy: worst.landedCost.totalJpy - total,
+      insight: analyzePrice(total, best.shop.id, historyById.get(product.id)),
     });
   }
 
+  const filtered = query.onlyDrops ? hits.filter((hit) => isPriceDrop(hit.insight)) : hits;
+
   const brandCounts = new Map<string, number>();
   const categoryCounts = new Map<CategorySlug, number>();
-  for (const hit of hits) {
+  for (const hit of filtered) {
     brandCounts.set(hit.product.brand, (brandCounts.get(hit.product.brand) ?? 0) + 1);
     categoryCounts.set(hit.product.category, (categoryCounts.get(hit.product.category) ?? 0) + 1);
   }
 
   return {
-    hits: sortHits(hits, query.sort ?? 'popular'),
-    total: hits.length,
+    hits: sortHits(filtered, query.sort ?? 'popular'),
+    total: filtered.length,
     brands: [...brandCounts.entries()]
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)),
@@ -155,6 +168,7 @@ export function parseSearchParams(params: Record<string, string | string[] | und
     shopId: one('shop') || undefined,
     minJpy: num('min'),
     maxJpy: num('max'),
+    onlyDrops: one('drop') === '1' || undefined,
     sort: sort && sort in SORT_LABELS ? (sort as SortKey) : undefined,
   };
 }
@@ -173,6 +187,7 @@ export function buildSearchHref(query: SearchQuery, overrides: Partial<SearchQue
   set('shop', merged.shopId);
   set('min', merged.minJpy);
   set('max', merged.maxJpy);
+  set('drop', merged.onlyDrops ? '1' : undefined);
   set('sort', merged.sort);
   const qs = params.toString();
   return qs ? `/search?${qs}` : '/search';

@@ -1,25 +1,14 @@
 import Link from 'next/link';
 import { categoryName } from '@/lib/categories';
 import { formatJpy, formatLocal } from '@/lib/currency';
+import { stripBrand } from '@/lib/format';
 import { COUNTRY_LABEL } from '@/lib/shops';
 import type { SearchHit } from '@/lib/types';
-import { DutyBadge, SpreadBadge, TrendBadge } from './Badges';
+import { AllTimeLowBadge, DutyBadge, PriceMoveBadge, SpreadBadge, TrendBadge } from './Badges';
 import { ProductThumb } from './ProductThumb';
 
-/**
- * 商品名がブランド名で始まっていれば、その部分を落とす。
- * 「VT Cosmetics」対「VT リードルショット」のように表記が揺れるため、
- * 先頭の単語単位でも一致を見る。
- */
-function stripBrand(name: string, brand: string): string {
-  for (const prefix of [brand, brand.split(' ')[0]]) {
-    if (prefix.length >= 2 && name.startsWith(prefix)) return name.slice(prefix.length).trimStart();
-  }
-  return name;
-}
-
 export function ProductCard({ hit }: { hit: SearchHit }) {
-  const { product, bestShop, bestOffer, bestLandedCost, spreadJpy } = hit;
+  const { product, bestShop, bestOffer, bestLandedCost, spreadJpy, insight } = hit;
 
   return (
     <article className="group flex h-full flex-col overflow-hidden rounded-2xl border border-line bg-white transition hover:shadow-[0_8px_24px_rgba(31,26,28,0.07)]">
@@ -45,12 +34,21 @@ export function ProductCard({ hit }: { hit: SearchHit }) {
 
         <div className="mt-auto pt-2">
           <p className="text-[11px] text-muted">送料・税込みの最安総額</p>
-          <p className="tabular text-xl font-bold text-rose-deep">{formatJpy(bestLandedCost.totalJpy)}</p>
+          <p className="tabular text-xl font-bold text-rose-deep">
+            {formatJpy(bestLandedCost.totalJpy)}
+            {insight.previousJpy !== undefined && insight.changeJpy < 0 && (
+              <span className="tabular ml-2 text-xs font-normal text-muted line-through">
+                {formatJpy(insight.previousJpy)}
+              </span>
+            )}
+          </p>
           <p className="mt-0.5 text-[11px] text-muted">
             {bestShop.name}（{formatLocal(bestOffer.price)}）+ 送料
             {bestLandedCost.shippingJpy === 0 ? '無料' : formatJpy(bestLandedCost.shippingJpy)}
           </p>
           <div className="mt-2 flex flex-wrap gap-1.5">
+            <PriceMoveBadge insight={insight} />
+            <AllTimeLowBadge insight={insight} />
             <DutyBadge landedCost={bestLandedCost} />
             <SpreadBadge spreadJpy={spreadJpy} />
             {!bestOffer.inStock && (

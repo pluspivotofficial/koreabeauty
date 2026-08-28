@@ -19,6 +19,7 @@ export const metadata: Metadata = {
     siteName: 'KoreaBeauty',
   },
   robots: { index: true, follow: true },
+  alternates: { types: { 'application/rss+xml': `${siteUrl}/feed.xml` } },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

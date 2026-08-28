@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { enabledNotifiers, NOTIFIERS } from '@/lib/notify';
 import { enabledProviders, PROVIDERS } from '@/lib/providers';
 import { SHOPS } from '@/lib/shops';
 
@@ -11,6 +12,7 @@ export const metadata: Metadata = {
 
 export default function AboutPage() {
   const enabled = new Set(enabledProviders().map((p) => p.id));
+  const enabledAlerts = new Set(enabledNotifiers().map((n) => n.id));
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-12">
@@ -57,6 +59,30 @@ export default function AboutPage() {
           「未設定」のデータ取得元は、必要なAPIキーが設定されていないため今は使われていません。設定すると自動的に
           横断検索の対象に加わります。
         </p>
+      </section>
+
+      <section className="mt-10">
+        <h2 className="text-lg font-bold">価格の記録と値下げの通知</h2>
+        <p className="mt-3 text-sm leading-relaxed">
+          1日1回、全商品の「送料・税込みの最安総額」を記録しています。前回から5%以上下がったものは
+          <Link href="/sale" className="mx-1 font-semibold text-rose-deep underline">
+            値下げ中のアイテム
+          </Link>
+          に集まり、
+          <Link href="/feed.xml" className="mx-1 font-semibold text-rose-deep underline">
+            RSS
+          </Link>
+          でも配信されます。商品ページでは記録した推移をグラフで確認できます。
+        </p>
+        <ul className="mt-4 space-y-2 text-sm">
+          {NOTIFIERS.map((notifier) => (
+            <li key={notifier.id} className="flex items-center gap-3 rounded-xl border border-line bg-white px-4 py-3">
+              <span className={`h-2 w-2 shrink-0 rounded-full ${enabledAlerts.has(notifier.id) ? 'bg-mint-deep' : 'bg-line'}`} />
+              <span className="font-semibold">{notifier.name}</span>
+              <span className="ml-auto text-xs text-muted">{enabledAlerts.has(notifier.id) ? '有効' : '未設定'}</span>
+            </li>
+          ))}
+        </ul>
       </section>
 
       <section className="mt-10">

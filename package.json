@@ -9,7 +9,10 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "snapshot": "tsx scripts/snapshot-prices.ts",
+    "seed:history": "tsx scripts/generate-price-history.ts",
+    "seed:catalog": "node scripts/generate-seed.mjs"
   },
   "dependencies": {
     "next": "15.5.4",
@@ -24,6 +27,7 @@
     "eslint": "9.34.0",
     "eslint-config-next": "15.5.4",
     "tailwindcss": "4.1.13",
+    "tsx": "^4.20.3",
     "typescript": "5.9.2",
     "vitest": "3.2.4"
   }

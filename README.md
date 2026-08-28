@@ -9,7 +9,9 @@
 - **横断検索** — OLIVE YOUNG Global / Coupang / NAVER / YesStyle / STYLEVANA / iHerb / Sephora US / Qoo10 / 楽天市場 / Amazon.co.jp の価格をひとつの検索窓から
 - **総額での並べ替え** — ショップの表示価格ではなく、送料・関税・消費税・通関手数料を足した金額で安い順に
 - **免税ラインの可視化** — 課税価格（商品価格の60%）が1万円以下なら免税。どのショップなら税金がかからないかをバッジで表示
-- **カテゴリ／ブランド／価格帯での絞り込み**、人気順・伸びている順・新着順のソート
+- **価格推移と値下げ検知** — 1日1回、各商品の最安総額を記録。商品ページに推移グラフ、
+  下がったものは[値下げ中のアイテム]とRSSに集約
+- **カテゴリ／ブランド／価格帯での絞り込み**、人気順・伸びている順・値下げ幅順などのソート
 - **個人輸入の注意点** — カテゴリごとの数量制限や電圧の注意を商品ページに表示
 - **JSON API** — `/api/search?q=鎮静&sort=price-asc&max=4000`
 
@@ -32,7 +34,10 @@ npm run dev                  # http://localhost:3000
 | `npm run build` / `npm start` | 本番ビルドと起動 |
 | `npm run typecheck` | 型チェック |
 | `npm run lint` | ESLint |
-| `npm test` | Vitest（税額計算と検索ロジックのテスト） |
+| `npm test` | Vitest（税額計算・検索・値下げ判定のテスト） |
+| `npm run snapshot` | その日の最安総額を記録し、値下げがあれば通知する |
+| `npm run seed:catalog` | `data/products.json` を再生成 |
+| `npm run seed:history` | `data/price-history.json` のサンプルを再生成 |
 
 ## デプロイ（Vercel）
 
@@ -48,10 +53,12 @@ app/                 画面（App Router）
   page.tsx           トップ
   search/            横断検索の結果
   category/[slug]/   カテゴリ一覧
-  item/[id]/         商品詳細と価格比較
+  item/[id]/         商品詳細・価格比較・価格推移グラフ
   ranking/           ランキング
+  sale/              値下げ中のアイテム
   guide/import/      個人輸入の税金ガイド
   api/search/        検索のJSON API
+  feed.xml/          値下げのRSSフィード
 components/          UIコンポーネント
 lib/
   types.ts           ドメインモデル
@@ -61,8 +68,12 @@ lib/
   shops.ts           ショップ定義（送料・配送日数・課税の扱い）
   categories.ts      カテゴリ定義
   providers/         データソースのアダプタ
-data/products.json   同梱の商品カタログ（生成物）
-scripts/             カタログの原本と生成スクリプト
+  priceHistory/      価格履歴の保管先アダプタ
+  priceDrop.ts       値下げ・過去最安の判定
+  notify/            値下げ通知先のアダプタ
+data/products.json      同梱の商品カタログ（生成物）
+data/price-history.json 価格履歴（毎日追記される）
+scripts/             カタログ・履歴の生成とスナップショット
 tests/               Vitest
 ```
 
@@ -107,6 +118,55 @@ export const myProvider: Provider = {
 反する可能性があり、構造変更で頻繁に壊れます。**公式のアフィリエイトAPI・提携フィードを優先**し、
 やむを得ない場合も対象サイトの規約と `robots.txt` を確認したうえで実装してください。
 商品画像も同様に、権利の確認が取れないものは同梱のプレースホルダ表示のままにしてあります。
+
+## 価格履歴と値下げ通知
+
+### しくみ
+
+1. `npm run snapshot` が全商品の「その時点で最も安いショップの総額」を1日1点だけ記録する
+2. 前回の記録から **5%以上**（`DROP_THRESHOLD_PCT`）下がっていれば値下げとして検知する
+3. 検知した値下げは `/sale` と `/feed.xml` に載り、設定されている通知先に送られる
+
+記録は `data/price-history.json` に入ります。GitHub Actions
+（`.github/workflows/price-snapshot.yml`）が毎日 UTC 21:00（日本時間 翌6:00）に実行し、
+差分があればリポジトリにコミットします。
+
+> **注意**：同梱の `data/price-history.json` は、初日からグラフと値下げ判定が動くように
+> 生成したサンプルです（`npm run seed:history`）。実測に切り替えるときは、このファイルを
+> `[]` にしてから毎日のスナップショットを積み上げてください。
+
+### 通知先を設定する
+
+`PRICE_ALERT_WEBHOOK_URL` に Slack か Discord の Incoming Webhook URL を入れるだけで、
+値下げがあった日にまとめて投稿されます。GitHub Actions から使う場合はリポジトリの
+Secrets に同名で登録してください。未設定なら記録だけが行われ、通知は送られません。
+
+RSS（`/feed.xml`）は設定不要で、フィードリーダーや Slack の RSS 連携に登録すれば
+それ自体が通知チャンネルになります。
+
+### 通知先を増やす
+
+`lib/notify/types.ts` の `Notifier` を実装して `lib/notify/index.ts` の `NOTIFIERS` に
+登録します。データソースのプロバイダと同じく、環境変数が無いものは自動的に外れ、
+1つが失敗しても他の通知先には送られます。
+
+```ts
+export const mailNotifier: Notifier = {
+  id: 'mail',
+  name: 'メール',
+  isEnabled: () => Boolean(process.env.RESEND_API_KEY),
+  async send(notices) { /* 送信する */ },
+};
+```
+
+### 履歴の保管先を変える
+
+同梱のJSONは商品数が数百件までを想定しています。それ以上に増やす、あるいは
+ユーザーごとの「お気に入りが値下げしたらメール」を作る場合は、
+`lib/priceHistory/types.ts` の `HistoryStore` を実装したDB版を用意し、
+`getHistoryStore()` の分岐を1行足してください。画面側の変更は不要です。
+（ユーザーごとの通知には、あわせてアカウントと購読テーブルが必要になります。
+Vercel のファイルシステムは書き込めないため、その段階でDBは必須です。）
 
 ## 総額の計算方法
 

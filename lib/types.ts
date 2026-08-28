@@ -1,3 +1,5 @@
+import type { PriceInsight } from './priceDrop';
+
 /** 通貨コード。本サイトが扱うのは韓国ウォン・米ドル・日本円の3種類。 */
 export type Currency = 'KRW' | 'USD' | 'JPY';
 
@@ -115,12 +117,14 @@ export interface SearchQuery {
   /** 総額（円）の下限・上限 */
   minJpy?: number;
   maxJpy?: number;
+  /** 値下げした商品だけに絞る */
+  onlyDrops?: boolean;
   sort?: SortKey;
 }
 
-export type SortKey = 'popular' | 'trending' | 'price-asc' | 'price-desc' | 'newest';
+export type SortKey = 'popular' | 'trending' | 'price-asc' | 'price-desc' | 'newest' | 'drop';
 
-/** 商品1件の検索結果。最安オファーとその総額を添えて返す。 */
+/** 商品1件の検索結果。最安オファーとその総額、価格推移の分析を添えて返す。 */
 export interface SearchHit {
   product: Product;
   /** 総額が最も安いオファー */
@@ -129,6 +133,8 @@ export interface SearchHit {
   bestLandedCost: LandedCost;
   /** 最安と最高の総額の差（円）。「比較する価値」の指標。 */
   spreadJpy: number;
+  /** 価格履歴にもとづく値下げ・過去最安の判定 */
+  insight: PriceInsight;
 }
 
 export interface SearchResult {

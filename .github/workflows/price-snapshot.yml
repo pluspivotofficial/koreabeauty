@@ -1,0 +1,44 @@
+name: 価格スナップショット
+
+# 毎日 UTC 21:00（日本時間 翌6:00）に価格を記録し、値下げがあれば通知する。
+on:
+  schedule:
+    - cron: '0 21 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: 価格を記録して値下げを通知する
+        env:
+          # 未設定でもスナップショットは動く（通知だけが行われない）
+          PRICE_ALERT_WEBHOOK_URL: ${{ secrets.PRICE_ALERT_WEBHOOK_URL }}
+          EXCHANGE_RATE_API_URL: ${{ vars.EXCHANGE_RATE_API_URL }}
+          RAKUTEN_APP_ID: ${{ secrets.RAKUTEN_APP_ID }}
+          NEXT_PUBLIC_SITE_URL: ${{ vars.NEXT_PUBLIC_SITE_URL }}
+        run: npm run snapshot
+
+      - name: 更新があればコミットする
+        run: |
+          if git diff --quiet -- data/price-history.json; then
+            echo "価格に変化はありませんでした"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/price-history.json
+          git commit -m "価格スナップショットを更新 ($(date -u +%Y-%m-%d))"
+          git push

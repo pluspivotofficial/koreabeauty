@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { DutyBadge, TrendBadge } from '@/components/Badges';
+import { AllTimeLowBadge, DutyBadge, PriceMoveBadge, TrendBadge } from '@/components/Badges';
+import { PriceHistoryChart } from '@/components/PriceHistoryChart';
 import { PriceBreakdown } from '@/components/PriceBreakdown';
 import { PriceTable } from '@/components/PriceTable';
 import { ProductCard } from '@/components/ProductCard';
@@ -9,8 +10,12 @@ import { ProductThumb } from '@/components/ProductThumb';
 import { categoryName, getCategory } from '@/lib/categories';
 import { formatJpy, getRates } from '@/lib/currency';
 import { IMPORT_LIMITS } from '@/lib/landedCost';
+import { analyzePrice } from '@/lib/priceDrop';
+import { getHistoryStore } from '@/lib/priceHistory';
 import { getSeedProduct, priceOffers, searchProducts, seedProductIds } from '@/lib/search';
-import { COUNTRY_LABEL } from '@/lib/shops';
+import { COUNTRY_LABEL, SHOPS } from '@/lib/shops';
+
+const SHOP_NAMES = Object.fromEntries(SHOPS.map((shop) => [shop.id, shop.name]));
 
 export const revalidate = 3600;
 
@@ -35,11 +40,12 @@ export default async function ItemPage({ params }: { params: Params }) {
   const product = getSeedProduct(id);
   if (!product) notFound();
 
-  const { rates, source } = await getRates();
+  const [{ rates, source }, history] = await Promise.all([getRates(), getHistoryStore().get(id)]);
   const priced = priceOffers(product, rates);
   const best = priced[0];
   const worst = priced[priced.length - 1];
   const spread = worst.landedCost.totalJpy - best.landedCost.totalJpy;
+  const insight = analyzePrice(best.landedCost.totalJpy, best.shop.id, history);
   const category = getCategory(product.category);
   const limit = IMPORT_LIMITS[product.category];
 
@@ -115,11 +121,20 @@ export default async function ItemPage({ params }: { params: Params }) {
 
           <div className="mt-6 rounded-2xl bg-rose-soft p-5">
             <p className="text-xs font-semibold text-rose-deep">最安の総額（送料・税込み）</p>
-            <p className="tabular mt-1 text-3xl font-bold text-rose-deep">{formatJpy(best.landedCost.totalJpy)}</p>
+            <p className="tabular mt-1 text-3xl font-bold text-rose-deep">
+              {formatJpy(best.landedCost.totalJpy)}
+              {insight.previousJpy !== undefined && insight.changeJpy < 0 && (
+                <span className="tabular ml-2 text-base font-normal text-muted line-through">
+                  {formatJpy(insight.previousJpy)}
+                </span>
+              )}
+            </p>
             <p className="mt-1 text-sm text-muted">
               {best.shop.name}／お届け目安 約 {best.shop.etaDays[0]}〜{best.shop.etaDays[1]} 日
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
+              <PriceMoveBadge insight={insight} />
+              <AllTimeLowBadge insight={insight} />
               <DutyBadge landedCost={best.landedCost} />
               {spread >= 500 && (
                 <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold text-muted">
@@ -153,6 +168,19 @@ export default async function ItemPage({ params }: { params: Params }) {
           )}
         </div>
       </div>
+
+      {insight.hasHistory && (
+        <section className="mt-12">
+          <div className="rounded-2xl border border-line bg-white p-5">
+            <PriceHistoryChart points={insight.series} shopNames={SHOP_NAMES} />
+            <p className="mt-3 border-t border-line pt-3 text-xs leading-relaxed text-muted">
+              毎日1回、その時点で最も安いショップの総額を記録しています。買い時の判断材料としてお使いください
+              （記録している{insight.windowDays}日間の最安は {formatJpy(insight.lowestJpy)}、最高は{' '}
+              {formatJpy(insight.highestJpy)}）。
+            </p>
+          </div>
+        </section>
+      )}
 
       <section className="mt-12">
         <h2 className="text-lg font-bold">ショップ別の価格比較</h2>

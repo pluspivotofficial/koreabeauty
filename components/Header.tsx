@@ -21,6 +21,11 @@ export function Header() {
               🔥 ランキング
             </Link>
           </li>
+          <li>
+            <Link href="/sale" className="inline-block rounded-full px-3 py-1.5 font-semibold text-rose-deep hover:bg-rose-soft">
+              ↓ 値下げ中
+            </Link>
+          </li>
           {CATEGORIES.map((c) => (
             <li key={c.slug}>
               <Link href={`/category/${c.slug}`} className="inline-block rounded-full px-3 py-1.5 text-muted hover:bg-rose-soft hover:text-ink">
