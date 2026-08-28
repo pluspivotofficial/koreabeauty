@@ -1,0 +1,42 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-sans:
+    'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', 'Yu Gothic UI', 'Meiryo',
+    system-ui, -apple-system, sans-serif;
+
+  /* K-ビューティーらしい、白ベース＋くすみピンクの配色 */
+  --color-cream: #fdfbf9;
+  --color-ink: #1f1a1c;
+  --color-muted: #6f6469;
+  --color-line: #ece5e6;
+  --color-rose-soft: #fdf1f2;
+  --color-rose: #d8607a;
+  --color-rose-deep: #b23c58;
+  --color-mint: #e8f4f0;
+  --color-mint-deep: #2f7d68;
+  --color-sun: #fff3e2;
+  --color-sun-deep: #a86a1f;
+}
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  background: var(--color-cream);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 数字を等幅にして、価格の桁が揃って見えるようにする */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 横幅の狭い端末で価格比較テーブルが本文を押し出さないようにする */
+.scroll-x {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
